@@ -123,10 +123,9 @@ const JanusSIP: React.FC = () => {
     const register = {
       proxy: "sip:pipeline.pbx002.ofon.biz:5060",
       request: "register",
-      username: 'sip:user_c3ectYSg2C',
+      username: 'sip:user_c3ectYSg2C@pipeline.pbx002.ofon.biz',
       secret: "XctY92x23gQF",
       display_name: "Dzaky Nashshar",
-      authuser: "sip:user_c3ectYSg2C@pipeline.pbx002.ofon.biz",
     };
     sipCall?.send({ message: register });
     console.log("registered")
