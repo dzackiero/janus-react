@@ -10,8 +10,13 @@ const JanusSIP: React.FC = () => {
     return "siptest-" + Math.random().toString(36).substr(2, 12);
   }, []);
 
+  const [sipUri, setSipUri] = useState("");
   const [registered, setRegistered] = useState(false);
   const [sipCall, setSipCall] = useState<JanusJS.PluginHandle | null>(null);
+  const dependencies = Janus.useDefaultDependencies({ adapter: adapter });
+
+  // tracks
+  const [remoteTracks, setRemoteTracks] = useState<any>({});
 
   useEffect(() => {
     // Ensure Janus is loaded before initialization
@@ -21,7 +26,7 @@ const JanusSIP: React.FC = () => {
         await new Promise<void>((resolve) => {
           Janus.init({
             debug: "all",
-            dependencies: Janus.useDefaultDependencies({ adapter: adapter }),
+            dependencies,
             callback: () => resolve(),
           });
         });
@@ -88,13 +93,29 @@ const JanusSIP: React.FC = () => {
                 );
               },
               onmessage: (msg, jsep) => {
-                console.log(" ::: Got a message OIT  :::", msg);
-                let error = msg.error;
-                console.log(error, msg.result);
-                if (error) {
-                  if (!registered) {
-                    //register the username.
-                  }
+                Janus.log(" ::: Got a message OIT  :::", msg);
+                const error = msg.error;
+              },
+              onremotetrack: (track, mid, on) => {
+                Janus.debug(
+                  "Remote track (mid=" +
+                    mid +
+                    ") " +
+                    (on ? "added" : "removed") +
+                    ":",
+                  track
+                );
+
+                if (!on) {
+                  // Track removed, get rid of the stream and the rendering
+                  delete remoteTracks[mid];
+                  return;
+                }
+
+                if (track.kind === "audio") {
+                  const stream = new MediaStream([track]);
+                  setRemoteTracks({ ...remoteTracks, mid: stream });
+                  Janus.log("Created remote audio stream:", stream);
                 }
               },
             });
@@ -123,19 +144,47 @@ const JanusSIP: React.FC = () => {
     const register = {
       proxy: "sip:pipeline.pbx002.ofon.biz:5060",
       request: "register",
-      username: 'sip:user_c3ectYSg2C@pipeline.pbx002.ofon.biz',
+      username: "sip:user_c3ectYSg2C@pipeline.pbx002.ofon.biz",
       secret: "XctY92x23gQF",
       display_name: "Dzaky Nashshar",
     };
     sipCall?.send({ message: register });
-    console.log("registered")
+    console.log("registered");
+  };
+
+  const handleCall = (uri: string) => {
+    // sipCall?.doAudio = true;
+    sipCall?.createOffer({
+      tracks: [{ type: "audio", capture: true, recv: true }],
+      success: (jsep) => {
+        Janus.log("GOT SDP!", jsep);
+        const body = { request: "call", uri: uri, srtp: "sdes_optional" };
+        sipCall.send({ message: body, jsep: jsep });
+      },
+      error: function (error) {
+        Janus.error("webRTC error", error);
+      },
+    });
   };
 
   return (
     <div>
       <h2>JanusSIP</h2>
       {!janusInstance && <p>Initializing Janus...</p>}
-      <button onClick={register}>Register</button>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <input
+          type="text"
+          value={sipUri}
+          onChange={(e) => setSipUri(e.target.value)}
+        />
+        <button onClick={() => handleCall(sipUri)}>Call</button>
+        <button onClick={register}>Register</button>
+      </div>
     </div>
   );
 };
